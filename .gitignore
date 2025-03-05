@@ -7,3 +7,4 @@ node_modules/
 .vscode/
 npm-debug.log
 template.tar.gz
+package-lock.json
