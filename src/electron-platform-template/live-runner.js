@@ -1,6 +1,7 @@
 /* eslint-disable no-undef */
 /* eslint-disable @typescript-eslint/no-var-requires */
-const cp = require('child_process');
+
+const childProcess = require('child_process');
 const chokidar = require('chokidar');
 const electron = require('electron');
 
@@ -10,20 +11,36 @@ const reloadWatcher = {
   debouncer: null,
   ready: false,
   watcher: null,
-  restarting: false,
+  restarting: false
 };
 
-///*
 function runBuild() {
-  return new Promise((resolve, _reject) => {
-    let tempChild = cp.spawn(npmCmd, ['run', 'build']);
-    tempChild.once('exit', () => {
-      resolve();
+  return new Promise((resolve, reject) => {
+    let tempChild = childProcess.spawn(npmCmd, ['run', 'build'], {
+      shell: true
     });
-    tempChild.stdout.pipe(process.stdout);
+
+    tempChild.stdout.on('data', (data) => {
+      process.stdout.write(data);
+    });
+
+    tempChild.stderr.on('data', (data) => {
+      process.stderr.write(`Build error: ${data}`);
+    });
+
+    tempChild.on('exit', (code) => {
+      if (code === 0) {
+        resolve();
+      } else {
+        reject(new Error(`Build process failed with code: ${code}`));
+      }
+    });
+
+    tempChild.on('error', (err) => {
+      reject(new Error(`Build process failed with error: ${err.message}`));
+    });
   });
 }
-//*/
 
 async function spawnElectron() {
   if (child !== null) {
@@ -32,20 +49,33 @@ async function spawnElectron() {
     child = null;
     await runBuild();
   }
-  child = cp.spawn(electron, ['--inspect=5858', './']);
-  child.on('exit', () => {
+
+  child = childProcess.spawn(electron, ['--inspect=5858', '.'], {
+    stdio: 'inherit',
+    shell: true // Thats neccesary to run on windows
+  });
+
+  child.on('error', (err) => {
+    console.error('Electron starting error:', err);
+  });
+
+  child.on('exit', (code) => {
     if (!reloadWatcher.restarting) {
+      console.log(`Electron exited with code ${code}`);
+      child = null;
       process.exit(0);
     }
   });
-  child.stdout.pipe(process.stdout);
+
+  // Redirect child process output to the main console
+  // child.stdout.pipe(process.stdout);
 }
 
 function setupReloadWatcher() {
   reloadWatcher.watcher = chokidar
     .watch('./src/**/*', {
       ignored: /[/\\]\./,
-      persistent: true,
+      persistent: true
     })
     .on('ready', () => {
       reloadWatcher.ready = true;
@@ -54,7 +84,7 @@ function setupReloadWatcher() {
       if (reloadWatcher.ready) {
         clearTimeout(reloadWatcher.debouncer);
         reloadWatcher.debouncer = setTimeout(async () => {
-          console.log('Restarting');
+          console.debug('Restarting...');
           reloadWatcher.restarting = true;
           await spawnElectron();
           reloadWatcher.restarting = false;
@@ -69,7 +99,12 @@ function setupReloadWatcher() {
 }
 
 (async () => {
-  await runBuild();
-  await spawnElectron();
-  setupReloadWatcher();
+  try {
+    await runBuild();
+    await spawnElectron();
+    setupReloadWatcher();
+  } catch (e) {
+    console.error('Electron starting error:', e);
+    process.exit(1);
+  }
 })();
