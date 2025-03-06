@@ -11,13 +11,13 @@ const reloadWatcher = {
   debouncer: null,
   ready: false,
   watcher: null,
-  restarting: false
+  restarting: false,
 };
 
 function runBuild() {
   return new Promise((resolve, reject) => {
     let tempChild = childProcess.spawn(npmCmd, ['run', 'build'], {
-      shell: true
+      shell: true,
     });
 
     tempChild.stdout.on('data', (data) => {
@@ -52,7 +52,7 @@ async function spawnElectron() {
 
   child = childProcess.spawn(electron, ['--inspect=5858', '.'], {
     stdio: 'inherit',
-    shell: true // Thats neccesary to run on windows
+    shell: true, // Thats neccesary to run on windows
   });
 
   child.on('error', (err) => {
@@ -75,7 +75,7 @@ function setupReloadWatcher() {
   reloadWatcher.watcher = chokidar
     .watch('./src/**/*', {
       ignored: /[/\\]\./,
-      persistent: true
+      persistent: true,
     })
     .on('ready', () => {
       reloadWatcher.ready = true;
